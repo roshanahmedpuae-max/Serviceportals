@@ -1923,31 +1923,6 @@ export default function AdminDashboard() {
                       </div>
                     )}
 
-                    {/* Send Notification Card */}
-                    <Card title="Send Notification" accent="bg-indigo-500">
-                      <div className="space-y-3">
-                        <p className="text-sm text-slate-700">
-                          Send manual notifications to employees or customers in your business unit.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowNotificationModal(true);
-                            setNotificationRecipientType("employee");
-                            setNotificationSelectedEmployeeIds([]);
-                            setNotificationSelectedCustomerIds([]);
-                            setNotificationSendToAll(false);
-                            setNotificationTitle("");
-                            setNotificationMessage("");
-                            setNotificationRecipientSearch("");
-                          }}
-                          className="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-semibold transition"
-                        >
-                          Send Notification
-                        </button>
-                      </div>
-                    </Card>
-
                     {activeDashboardPanel === "rentalMachines" && adminAuth?.businessUnit === "PrintersUAE" && (
                       <div
                         className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4 py-8"
