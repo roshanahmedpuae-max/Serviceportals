@@ -495,11 +495,11 @@ export default function AdminDashboard() {
         if (data?.user && (data.user.role === "admin" || data.user.role === "employee")) {
           const featureAccess = data.user.featureAccess || [];
           
-          // For employees, check if they have any feature access - if not, don't restore session
+          // For employees, check if they have any feature access - if not, don't restore admin session
           if (data.user.role === "employee") {
             if (!Array.isArray(featureAccess) || featureAccess.length === 0) {
-              // Employee has no feature access - clear session
-              await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+              // Employee has no feature access - they can still use employee portal,
+              // but should not be auto-logged into the admin dashboard
               return;
             }
           }

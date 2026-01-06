@@ -27,14 +27,6 @@ export async function POST(request: NextRequest) {
   const employeeObj = employee.toObject();
   const featureAccess = (employeeObj as any).featureAccess || [];
   
-  // Check if employee has any feature access - if not, they cannot login to admin portal
-  if (!Array.isArray(featureAccess) || featureAccess.length === 0) {
-    return NextResponse.json(
-      { error: "Access denied: No feature access granted. Please contact administrator." },
-      { status: 403 }
-    );
-  }
-  
   const employeePayload: Employee = {
     id: (employeeObj as { id?: string; _id: string }).id ?? employeeObj._id,
     name: employeeObj.name,
