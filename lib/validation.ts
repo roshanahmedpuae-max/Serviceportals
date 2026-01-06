@@ -99,7 +99,11 @@ export const serviceOrderSchema = z.object({
     })
     .optional()
     .or(z.literal("")),
-});
+  // Optional serviceType field for PDF preview modal (not validated, just passed through)
+  serviceType: z
+    .enum(["printers-uae", "g3-facility", "it-service"])
+    .optional(),
+}).passthrough(); // Allow additional fields to pass through without validation errors
 
 export type ServiceOrderFormData = z.infer<typeof serviceOrderSchema>;
 

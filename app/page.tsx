@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RiMenu5Fill } from "react-icons/ri";
 import { BiSolidHomeSmile } from "react-icons/bi";
 import { FaSignOutAlt } from "react-icons/fa";
-import { FaUser, FaFileWaveform, FaFileCircleQuestion } from "react-icons/fa6";
+import { FaUser, FaFileWaveform, FaFileCircleQuestion, FaFaceGrinStars } from "react-icons/fa6";
 import { IoMdArrowRoundBack } from "react-icons/io";
 import { IoLogOut, IoNotifications } from "react-icons/io5";
 import { SiTicktick } from "react-icons/si";
@@ -129,6 +129,15 @@ export default function Home() {
     rejectionReason?: string;
     approvalMessage?: string;
   }>>([]);
+  const [ratingStats, setRatingStats] = useState<{ averageScore: number | null; count: number }>({
+    averageScore: null,
+    count: 0,
+  });
+  const [showRatings, setShowRatings] = useState(false);
+  const [ratingDetails, setRatingDetails] = useState<
+    { id: string; workOrderId: string; score: number; comment?: string; createdAt?: string }[]
+  >([]);
+  const [loadingRatings, setLoadingRatings] = useState(false);
   const [showAdvanceSalaryForm, setShowAdvanceSalaryForm] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceReason, setAdvanceReason] = useState("");
@@ -224,7 +233,7 @@ export default function Home() {
     if (!employeeAuth) return;
     setLoadingEmployee(true);
     try {
-      const [orders, schedules, tickets] = await Promise.all([
+      const [orders, schedules, tickets, ratings] = await Promise.all([
         authedFetch("/api/work-orders"),
         employeeAuth.businessUnit === "PrintersUAE"
           ? authedFetch(
@@ -234,6 +243,7 @@ export default function Home() {
             )
           : Promise.resolve([]),
         authedFetch("/api/tickets"),
+        authedFetch("/api/ratings/employee"),
       ]);
       setWorkOrders(orders);
       if (employeeAuth.businessUnit === "PrintersUAE") {
@@ -242,6 +252,13 @@ export default function Home() {
         setDailySchedules([]);
       }
       setEmployeeTickets(Array.isArray(tickets) ? tickets : []);
+      if (ratings) {
+        setRatingStats({
+          averageScore: typeof ratings.averageScore === "number" ? ratings.averageScore : null,
+          count: typeof ratings.count === "number" ? ratings.count : 0,
+        });
+        setRatingDetails(Array.isArray(ratings.ratings) ? ratings.ratings : []);
+      }
       
       // Load employee notifications
       try {
@@ -1411,10 +1428,10 @@ export default function Home() {
           <button
             type="button"
             onClick={() => {
-            setShowAssignments(false);
-            setShowPayrollSection(false);
-            setShowEmployeeDocs(false);
-            setShowLeaveSection(true);
+              setShowAssignments(false);
+              setShowPayrollSection(false);
+              setShowEmployeeDocs(false);
+              setShowLeaveSection(true);
               if (typeof window !== "undefined") {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }
@@ -1423,6 +1440,14 @@ export default function Home() {
             title="Request leave"
           >
             <FaFileCircleQuestion className="w-6 h-6" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRatings(true)}
+            className="hidden lg:inline-flex fixed bottom-72 right-6 z-40 items-center justify-center w-12 h-12 rounded-full bg-amber-500 text-white shadow-lg shadow-amber-400/40 hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200"
+            title="View your ratings"
+          >
+            <FaFaceGrinStars className="w-6 h-6" />
           </button>
         </>
       )}
@@ -1525,6 +1550,39 @@ export default function Home() {
               )}
             </div>
           )}
+          {employeeAuth && (
+            <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-4 space-y-3 mt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FaFaceGrinStars className="w-5 h-5 text-amber-500" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">Your Customer Ratings</p>
+                    <p className="text-xs text-amber-800/80">
+                      Average rating from customers based on completed jobs.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-amber-900">
+                      {ratingStats.averageScore ? ratingStats.averageScore.toFixed(1) : "—"}
+                    </p>
+                    <p className="text-xs text-amber-800/80">
+                      {ratingStats.count} rating{ratingStats.count === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowRatings(true)}
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500 text-white px-3 py-1 text-xs font-semibold shadow hover:bg-amber-400"
+                  >
+                    <FaFaceGrinStars className="w-3 h-3" />
+                    <span>View</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {workOrders.length === 0 && (
             <p className="text-sm text-slate-500">No work order assignments yet.</p>
           )}
@@ -1541,50 +1599,95 @@ export default function Home() {
               .map((w) => {
                 // Format job number (use first 8 characters of ID for readability)
                 const jobNumber = `WO-${w.id.slice(0, 8).toUpperCase()}`;
+                const isCompleted = w.status === "Submitted";
                 return (
-                  <button
+                  <div
                     key={w.id}
-                    type="button"
-                    onClick={() => {
-                      setPrefilledWorkOrder(w);
-                      const jobNumber = `WO-${w.id.slice(0, 8).toUpperCase()}`;
-                      setActiveJobNumber(jobNumber);
-                      setShowAssignments(false);
-                      scrollToFormTop();
-                    }}
-                    className="text-left rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 p-4 space-y-3 transition-all shadow-sm hover:shadow-md"
+                    className="rounded-xl border-2 border-slate-200 bg-white hover:border-indigo-400 hover:bg-indigo-50/30 p-4 space-y-3 transition-all shadow-sm hover:shadow-md"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">
-                          Job Number
-                        </p>
-                        <p className="text-lg font-bold text-slate-900 mb-3">{jobNumber}</p>
-                        <div className="space-y-2">
-                          <div>
-                            <p className="text-xs font-medium text-slate-500 mb-1">Customer Name</p>
-                            <p className="text-sm font-semibold text-slate-900">{w.customerName ?? "—"}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-slate-500 mb-1">Location</p>
-                            <p className="text-sm text-slate-700">{w.locationAddress}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrefilledWorkOrder(w);
+                        const jobNumber = `WO-${w.id.slice(0, 8).toUpperCase()}`;
+                        setActiveJobNumber(jobNumber);
+                        setShowAssignments(false);
+                        scrollToFormTop();
+                      }}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-1">
+                            Job Number
+                          </p>
+                          <p className="text-lg font-bold text-slate-900 mb-3">{jobNumber}</p>
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-xs font-medium text-slate-500 mb-1">Customer Name</p>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {w.customerName ?? "—"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-500 mb-1">Location</p>
+                              <p className="text-sm text-slate-700">{w.locationAddress}</p>
+                            </div>
                           </div>
                         </div>
+                        <span
+                          className={`text-xs px-2.5 py-1 rounded-full ${
+                            w.status === "Assigned"
+                              ? "bg-blue-100 text-blue-700"
+                              : w.status === "Submitted"
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
+                        >
+                          {w.status}
+                        </span>
                       </div>
-                      <span className={`text-xs px-2.5 py-1 rounded-full ${
-                        w.status === "Assigned" 
-                          ? "bg-blue-100 text-blue-700" 
-                          : w.status === "Submitted"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-100 text-slate-700"
-                      }`}>
-                        {w.status}
-                      </span>
-                    </div>
-                    <div className="pt-2 border-t border-slate-100">
-                      <p className="text-xs text-indigo-600 font-medium">Click to open form →</p>
-                    </div>
-                  </button>
+                      <div className="pt-2 border-t border-slate-100">
+                        <p className="text-xs text-indigo-600 font-medium">Click to open form →</p>
+                      </div>
+                    </button>
+                    {isCompleted && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch("/api/ratings/link", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({ workOrderId: w.id }),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                              throw new Error(data.error || "Failed to generate rating link");
+                            }
+                            const link = data.link as string;
+                            if (navigator.clipboard && link) {
+                              await navigator.clipboard.writeText(link);
+                              toast.success("Rating link copied. Share it with the customer.");
+                            } else {
+                              toast.success("Rating link generated. Please copy it from the browser.");
+                            }
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error
+                                ? error.message
+                                : "Failed to generate rating link"
+                            );
+                          }
+                        }}
+                        className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-500 text-white px-3 py-1 text-xs font-semibold shadow hover:bg-amber-400"
+                      >
+                        <FaFaceGrinStars className="w-3 h-3" />
+                        <span>Copy rating link</span>
+                      </button>
+                    )}
+                  </div>
                 );
               })}
           </div>
@@ -3061,6 +3164,79 @@ export default function Home() {
             </div>
           )}
         </section>
+      )}
+
+      {employeeAuth && showRatings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowRatings(false)}
+          />
+          <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FaFaceGrinStars className="w-6 h-6 text-amber-500" />
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Your Ratings</h3>
+                  <p className="text-xs text-slate-500">
+                    Overall score:{" "}
+                    {ratingStats.averageScore
+                      ? `${ratingStats.averageScore.toFixed(1)} / 5 (${ratingStats.count} rating${
+                          ratingStats.count === 1 ? "" : "s"
+                        })`
+                      : "No ratings yet"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRatings(false)}
+                className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+                aria-label="Close ratings"
+              >
+                ×
+              </button>
+            </div>
+
+            {loadingRatings && (
+              <p className="text-sm text-slate-500 mb-2">Loading ratings...</p>
+            )}
+
+            {ratingDetails.length === 0 && !loadingRatings && (
+              <p className="text-sm text-slate-500">
+                You don't have any customer ratings yet. Once customers submit ratings for your
+                completed jobs, they will appear here.
+              </p>
+            )}
+
+            {ratingDetails.length > 0 && (
+              <div className="divide-y divide-slate-100">
+                {ratingDetails.map((r) => (
+                  <div key={r.id} className="py-3 flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1 text-amber-500 text-sm">
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <span key={idx}>{idx < r.score ? "★" : "☆"}</span>
+                        ))}
+                      </div>
+                      {r.createdAt && (
+                        <span className="text-[11px] text-slate-400">
+                          {new Date(r.createdAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {r.comment && (
+                      <p className="text-sm text-slate-700 whitespace-pre-line">{r.comment}</p>
+                    )}
+                    <p className="text-xs text-slate-400">
+                      Work order ID: <span className="font-mono">{r.workOrderId}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {employeeAuth && showEmployeeDocs && (

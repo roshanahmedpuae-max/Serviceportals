@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, Fragment, FormEvent, useRef, ChangeEvent,
 import { RiMenu5Fill, RiAdvertisementFill, RiDashboardFill, RiCalendarScheduleFill } from "react-icons/ri";
 import { BiSolidHomeSmile, BiLogoDailymotion } from "react-icons/bi";
 import { FaSignOutAlt, FaUserShield, FaEye, FaRegEye } from "react-icons/fa";
-import { FaFileInvoiceDollar } from "react-icons/fa6";
+import { FaFileInvoiceDollar, FaFaceGrinStars } from "react-icons/fa6";
 import { MdModeEdit, MdDelete, MdInventory2 } from "react-icons/md";
 import { BsFillSendFill } from "react-icons/bs";
 import { IoMdAddCircle } from "react-icons/io";
@@ -117,6 +117,7 @@ const BASE_TABS = [
   { id: "payroll", label: "Payroll" },
   { id: "assign-work", label: "Schedule Works" },
   { id: "tickets", label: "Tickets" },
+  { id: "employee-ratings", label: "Employee Ratings" },
 ] as const;
 type TabId = (typeof BASE_TABS)[number]["id"] | "daily-schedule";
 
@@ -229,6 +230,10 @@ export default function AdminDashboard() {
     | "rental_machines"
     | null
   >(null);
+  const [employeeRatingSummary, setEmployeeRatingSummary] = useState<
+    { employeeId: string; employeeName: string; role: string; averageScore: number; count: number }[]
+  >([]);
+  const [loadingEmployeeRatings, setLoadingEmployeeRatings] = useState(false);
 
   const availableCount = useMemo(() => 
     employees.filter((e) => e.status === "Available").length,
@@ -404,6 +409,11 @@ export default function AdminDashboard() {
     if (isAdmin || featureAccess.includes("tickets")) {
       base.push({ id: "tickets", label: "Tickets", icon: <IoTicketSharp /> });
     }
+
+    // Employee Ratings: visible to admins
+    if (isAdmin) {
+      base.push({ id: "employee-ratings", label: "Employee Ratings", icon: <FaFaceGrinStars /> });
+    }
     
     // Daily Schedule: PrintersUAE only and requires "schedule_works" access
     if (adminAuth.businessUnit === "PrintersUAE" && (isAdmin || featureAccess.includes("schedule_works"))) {
@@ -452,14 +462,12 @@ export default function AdminDashboard() {
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       const errorMessage = body.error || "Request failed";
-      // For 403 Forbidden errors (feature access denied), create a more specific error
+      const error: any = new Error(errorMessage);
+      error.status = res.status;
       if (res.status === 403) {
-        const error = new Error(errorMessage);
-        (error as any).status = 403;
-        (error as any).isForbidden = true;
-        throw error;
+        error.isForbidden = true;
       }
-      throw new Error(errorMessage);
+      throw error;
     }
     return res.json();
   }, []);
@@ -539,6 +547,18 @@ export default function AdminDashboard() {
       setEmployees(e.status === "fulfilled" ? e.value : []);
       setWorkOrders(w.status === "fulfilled" ? w.value : []);
       setPayrolls(p.status === "fulfilled" && Array.isArray(p.value) ? p.value : []);
+      if (isAdmin) {
+        try {
+          const ratings = await authedFetch("/api/ratings/admin");
+          setEmployeeRatingSummary(
+            ratings && Array.isArray(ratings.employees) ? ratings.employees : []
+          );
+        } catch {
+          setEmployeeRatingSummary([]);
+        }
+      } else {
+        setEmployeeRatingSummary([]);
+      }
       try {
         const t = await authedFetch("/api/tickets");
         setTickets(Array.isArray(t) ? t : []);
@@ -3824,6 +3844,54 @@ export default function AdminDashboard() {
                             <tr>
                               <td colSpan={5} className="py-3 text-sm text-slate-500">
                                 No tickets yet.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                )}
+
+                {activeTab === "employee-ratings" && (
+                  <Card title="Employee Ratings" accent="bg-amber-500">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm text-slate-600">
+                        Overview of average customer ratings per employee for this business unit.
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-slate-500">
+                            <th className="py-2 pr-3">Employee</th>
+                            <th className="py-2 pr-3">Role</th>
+                            <th className="py-2 pr-3">Average Rating</th>
+                            <th className="py-2 pr-3">Total Ratings</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {employeeRatingSummary.map((r) => (
+                            <tr key={r.employeeId}>
+                              <td className="py-2 pr-3 text-slate-900">{r.employeeName}</td>
+                              <td className="py-2 pr-3 text-slate-700">{r.role}</td>
+                              <td className="py-2 pr-3">
+                                <span className="inline-flex items-center gap-1 text-amber-600">
+                                  <FaFaceGrinStars className="w-4 h-4" />
+                                  <span className="font-semibold">
+                                    {typeof r.averageScore === "number"
+                                      ? r.averageScore.toFixed(1)
+                                      : "—"}
+                                  </span>
+                                </span>
+                              </td>
+                              <td className="py-2 pr-3 text-slate-700">{r.count}</td>
+                            </tr>
+                          ))}
+                          {employeeRatingSummary.length === 0 && (
+                            <tr>
+                              <td colSpan={4} className="py-3 text-sm text-slate-500">
+                                No employee ratings available yet.
                               </td>
                             </tr>
                           )}

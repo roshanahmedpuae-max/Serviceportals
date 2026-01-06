@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ServiceOrderFormData } from "@/lib/validation";
+import { base64ToBlob, downloadPdfFromBase64, parseApiError } from "@/lib/pdf-client";
 import toast from "react-hot-toast";
 import { BsFillTelephoneFill } from "react-icons/bs";
 import { FaMobile } from "react-icons/fa";
@@ -98,6 +99,8 @@ export default function PDFPreviewModal({
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [pdfFilename, setPdfFilename] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [pdfState, setPdfState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [pdfErrorMessage, setPdfErrorMessage] = useState<string | null>(null);
   
   const config = SERVICE_CONFIG[serviceType];
 
@@ -109,9 +112,17 @@ export default function PDFPreviewModal({
   }, [isOpen, formData]);
 
   const generatePDF = async () => {
-    if (!formData) return;
+    if (!formData) {
+      toast.error("No form data available. Please fill out the form first.");
+      return;
+    }
     
+    setPdfState("loading");
+    setPdfErrorMessage(null);
     setIsGenerating(true);
+    setPdfBlob(null); // Reset blob state
+    setPdfFilename(""); // Reset filename
+    
     try {
       const response = await fetch("/api/generate-pdf", {
         method: "POST",
@@ -124,31 +135,83 @@ export default function PDFPreviewModal({
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || "Failed to generate PDF");
+        // Parse error using shared utility
+        const { message, details } = parseApiError(result);
+        
+        console.error("PDF generation API error:", {
+          status: response.status,
+          requestId: result.requestId,
+          message,
+          details,
+        });
+        
+        // Show detailed error message to user
+        if (response.status === 400) {
+          // Validation errors
+          toast.error(`Validation error: ${message}`);
+        } else {
+          // Server errors
+          toast.error(message || "Failed to generate PDF preview");
+        }
+
+        setPdfState("error");
+        setPdfErrorMessage(message || "Failed to generate PDF preview");
+        return;
       }
 
-      // Convert base64 to blob
-      const byteCharacters = atob(result.pdf.base64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      // Validate response structure
+      if (!result.pdf || !result.pdf.base64 || !result.pdf.filename) {
+        console.error("Invalid PDF response structure:", result);
+        toast.error("Invalid response from server. Please try again.");
+        setPdfState("error");
+        setPdfErrorMessage("Invalid response from server. Please try again.");
+        return;
       }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: "application/pdf" });
-      
-      setPdfBlob(blob);
-      setPdfFilename(result.pdf.filename);
+
+      // Validate base64 before creating Blob
+      const base64: string = result.pdf.base64;
+      if (!base64 || base64.length < 100) {
+        console.error("Invalid base64 data received for PDF");
+        toast.error("Invalid PDF data received from server.");
+        setPdfState("error");
+        setPdfErrorMessage("Invalid PDF data received from server.");
+        return;
+      }
+
+      // Convert base64 to blob using shared utility
+      try {
+        const blob = base64ToBlob(base64, result.pdf.mimeType || "application/pdf");
+        setPdfBlob(blob);
+        setPdfFilename(result.pdf.filename);
+        setPdfState("ready");
+        setPdfErrorMessage(null);
+        toast.success("PDF generated successfully!");
+      } catch (blobError) {
+        console.error("Blob conversion error:", blobError);
+        const errorMessage = blobError instanceof Error ? blobError.message : "Failed to process PDF data";
+        toast.error(errorMessage);
+        setPdfState("error");
+        setPdfErrorMessage(errorMessage);
+      }
     } catch (error) {
-      console.error("PDF generation error:", error);
-      toast.error("Failed to generate PDF preview");
+      console.error("PDF generation network error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Network error occurred";
+      toast.error(`Failed to generate PDF: ${errorMessage}`);
+      setPdfState("error");
+      setPdfErrorMessage(errorMessage);
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleShare = async () => {
-    if (!pdfBlob || !formData) {
-      toast.error("PDF not ready. Please wait and try again.");
+    if (!pdfBlob || pdfState !== "ready") {
+      toast.error("PDF not ready. Please wait for PDF generation to complete.");
+      return;
+    }
+    
+    if (!formData) {
+      toast.error("Form data not available.");
       return;
     }
     
@@ -219,17 +282,32 @@ export default function PDFPreviewModal({
   };
 
   const downloadPDF = () => {
-    if (!pdfBlob) return;
+    if (!pdfBlob || pdfState !== "ready") {
+      toast.error("PDF not ready. Please wait for PDF generation to complete.");
+      return;
+    }
     
-    const url = URL.createObjectURL(pdfBlob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = pdfFilename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("PDF downloaded!");
+    if (!pdfFilename) {
+      toast.error("PDF filename not available. Please try generating the PDF again.");
+      return;
+    }
+    
+    try {
+      // Use shared download utility
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = pdfFilename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("PDF downloaded!");
+    } catch (error) {
+      console.error("Download error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to download PDF";
+      toast.error(errorMessage);
+    }
   };
 
   if (!isOpen || !formData) return null;
@@ -512,6 +590,16 @@ export default function PDFPreviewModal({
           )}
         </div>
 
+        {/* Error message (if any) */}
+        {pdfState === "error" && pdfErrorMessage && (
+          <div className="bg-red-50 border-t border-red-200 px-4 py-2 text-xs text-red-700 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14M12 3a9 9 0 019 9 9 9 0 01-9 9 9 9 0 01-9-9 9 9 0 019-9z" />
+            </svg>
+            <span>{pdfErrorMessage}</span>
+          </div>
+        )}
+
         {/* Modal Footer - Action Buttons */}
         <div className="bg-white border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4 flex flex-col sm:flex-row gap-2 sm:gap-3 sm:justify-end flex-shrink-0">
           <button
@@ -522,7 +610,7 @@ export default function PDFPreviewModal({
           </button>
           <button
             onClick={downloadPDF}
-            disabled={!pdfBlob || isGenerating}
+            disabled={pdfState !== "ready" || !pdfBlob || isGenerating}
             className="px-4 py-2.5 bg-gray-800 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 order-3 sm:order-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -532,7 +620,7 @@ export default function PDFPreviewModal({
           </button>
           <button
             onClick={handleShare}
-            disabled={!pdfBlob || isSharing || isGenerating}
+            disabled={pdfState !== "ready" || !pdfBlob || isSharing || isGenerating}
             className={`px-4 py-2.5 bg-gradient-to-r ${config.gradient} text-white rounded-lg font-medium ${config.hoverGradient} transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 order-1 sm:order-3`}
           >
             {isSharing ? (

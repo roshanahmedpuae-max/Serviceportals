@@ -91,6 +91,18 @@ export interface WorkOrder {
   };
 }
 
+export interface EmployeeRating {
+  id: string;
+  businessUnit: BusinessUnit;
+  employeeId: string;
+  workOrderId: string;
+  score: number; // 1-5
+  comment?: string;
+  ratingToken: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DailySchedule {
   id: string;
   businessUnit: BusinessUnit;

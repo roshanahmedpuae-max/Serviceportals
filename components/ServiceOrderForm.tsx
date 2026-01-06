@@ -70,6 +70,7 @@ const ServiceOrderForm = React.memo(function ServiceOrderForm({ onBack, business
       requesterName: "",
       locationAddress: "",
       phone: "",
+      email: "",
       customerType: "Service and Repair",
       priorityLevel: "Normal",
       orderDateTime: getCurrentDateTime(),
@@ -79,6 +80,7 @@ const ServiceOrderForm = React.memo(function ServiceOrderForm({ onBack, business
       requestDescription: "",
       incompleteWorkExplanation: "",
       countReportPhoto: "",
+      workPhotos: [],
       workCompletedBy: "",
       completionDate: getCurrentDate(),
       technicianSignature: "",
@@ -517,6 +519,7 @@ const ServiceOrderForm = React.memo(function ServiceOrderForm({ onBack, business
       isOpen={showPreview}
       onClose={handleClosePreview}
       formData={previewData}
+      serviceType="printers-uae"
     />
       {loading && (
         <div className="px-4 py-2 text-sm text-gray-500">Loading latest options...</div>

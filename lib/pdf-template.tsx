@@ -480,6 +480,54 @@ const Footer = () => (
 );
 
 export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
+  // Ensure data exists - if data is undefined/null, create empty object
+  const safeInput = data || {};
+  
+  // Ensure data exists and has required fields with defaults
+  // All properties must be defined (no undefined) for React-PDF compatibility
+  const safeData: ServiceOrderFormData = {
+    requesterName: safeInput.requesterName || "",
+    locationAddress: safeInput.locationAddress || "",
+    phone: safeInput.phone || "",
+    email: safeInput.email || "",
+    customerType: safeInput.customerType || "Service and Repair",
+    priorityLevel: safeInput.priorityLevel || "Normal",
+    orderDateTime: safeInput.orderDateTime || new Date().toISOString(),
+    quotationReferenceNumber: safeInput.quotationReferenceNumber || "",
+    workAssignedTo: safeInput.workAssignedTo || "",
+    workBilledTo: safeInput.workBilledTo || "",
+    requestDescription: safeInput.requestDescription || "",
+    incompleteWorkExplanation: safeInput.incompleteWorkExplanation || "",
+    countReportPhoto: safeInput.countReportPhoto || "",
+    workPhotos: Array.isArray(safeInput.workPhotos) 
+      ? safeInput.workPhotos
+          .filter((pair) => 
+            pair !== null && 
+            pair !== undefined && 
+            typeof pair === 'object' &&
+            !Array.isArray(pair) && // Ensure it's an object, not an array
+            (pair.beforePhoto || pair.afterPhoto) // Only include pairs with at least one photo
+          )
+          .map((pair: any, index) => {
+            // Create a plain object with all properties defined
+            const sanitizedPair: { id: string; beforePhoto: string; afterPhoto: string } = {
+              id: (pair.id && typeof pair.id === 'string') ? pair.id : `photo-${Date.now()}-${index}`,
+              beforePhoto: (pair.beforePhoto && typeof pair.beforePhoto === 'string') ? pair.beforePhoto : "",
+              afterPhoto: (pair.afterPhoto && typeof pair.afterPhoto === 'string') ? pair.afterPhoto : "",
+            };
+            return sanitizedPair;
+          })
+          .filter(pair => pair.beforePhoto || pair.afterPhoto) // Final filter to ensure at least one photo
+      : [],
+    workCompletedBy: safeInput.workCompletedBy || "",
+    completionDate: safeInput.completionDate || new Date().toISOString().slice(0, 10),
+    technicianSignature: safeInput.technicianSignature || "",
+    customerApprovalName: safeInput.customerApprovalName || "",
+    customerSignature: safeInput.customerSignature || "",
+    customerApprovalDate: safeInput.customerApprovalDate || new Date().toISOString().slice(0, 10),
+    paymentMethod: safeInput.paymentMethod || "",
+  };
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -498,23 +546,23 @@ export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
             <View style={styles.gridCol}>
               <View style={styles.row}>
                 <Text style={styles.label}>Customer Name:</Text>
-                <Text style={styles.value}>{data.requesterName}</Text>
+                <Text style={styles.value}>{safeData.requesterName}</Text>
               </View>
               <View style={styles.row}>
                 <Text style={styles.label}>Customer Phone Number:</Text>
-                <Text style={styles.value}>{data.phone || "N/A"}</Text>
+                <Text style={styles.value}>{safeData.phone || "N/A"}</Text>
               </View>
             </View>
             <View style={styles.gridCol}>
               <View style={styles.row}>
                 <Text style={styles.label}>Service Type:</Text>
-                <Text style={styles.value}>{data.customerType}</Text>
+                <Text style={styles.value}>{safeData.customerType}</Text>
               </View>
             </View>
           </View>
           <View style={styles.row}>
             <Text style={styles.label}>Location Address:</Text>
-            <Text style={styles.value}>{data.locationAddress}</Text>
+            <Text style={styles.value}>{safeData.locationAddress}</Text>
           </View>
         </View>
 
@@ -530,12 +578,12 @@ export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
             <View style={styles.gridCol}>
               <View style={styles.row}>
                 <Text style={styles.label}>Order Date & Time:</Text>
-                <Text style={styles.value}>{formatDateTime(data.orderDateTime)}</Text>
+                <Text style={styles.value}>{formatDateTime(safeData.orderDateTime)}</Text>
               </View>
-              {data.quotationReferenceNumber && (
+              {safeData.quotationReferenceNumber && (
                 <View style={styles.row}>
                   <Text style={styles.label}>Quotation/Reference Number:</Text>
-                  <Text style={styles.value}>{data.quotationReferenceNumber}</Text>
+                  <Text style={styles.value}>{safeData.quotationReferenceNumber}</Text>
                 </View>
               )}
             </View>
@@ -554,7 +602,7 @@ export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
             <View style={styles.gridCol}>
               <View style={styles.row}>
                 <Text style={styles.label}>Work Assigned To:</Text>
-                <Text style={styles.value}>{data.workAssignedTo}</Text>
+                <Text style={styles.value}>{safeData.workAssignedTo}</Text>
               </View>
             </View>
           </View>
@@ -572,47 +620,59 @@ export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
           <View style={styles.textBlock}>
             <Text style={styles.textBlockLabel}>Work Description:</Text>
             <Text style={styles.textBlockValue}>
-              {data.requestDescription}
+              {safeData.requestDescription}
             </Text>
           </View>
 
           <View style={styles.textBlock}>
             <Text style={styles.textBlockLabel}>Findings:</Text>
             <Text style={styles.textBlockValue}>
-              {data.incompleteWorkExplanation || "N/A"}
+              {safeData.incompleteWorkExplanation || "N/A"}
             </Text>
           </View>
 
-          {data.countReportPhoto && (
+          {safeData.countReportPhoto && (
             <View style={styles.photoContainer}>
               <Text style={styles.textBlockLabel}>Count Report Photo:</Text>
-              <Image src={data.countReportPhoto} style={styles.photoImage} />
+              <Image src={safeData.countReportPhoto} style={styles.photoImage} />
             </View>
           )}
 
-          {data.workPhotos && data.workPhotos.length > 0 && (
+          {safeData.workPhotos && safeData.workPhotos.length > 0 && (
             <View style={styles.photoContainer}>
               <Text style={styles.textBlockLabel}>Before and After Work Photos:</Text>
-              {data.workPhotos.map((pair, index) => {
-                const hasPhotos = pair.beforePhoto || pair.afterPhoto;
-                if (!hasPhotos) return null;
+              {safeData.workPhotos.map((pair, index) => {
+                // Defensive checks - ensure pair is a valid object with required structure
+                if (!pair || typeof pair !== 'object' || Array.isArray(pair)) {
+                  return null;
+                }
+                
+                // Ensure all properties exist and are strings
+                const beforePhoto = (pair.beforePhoto && typeof pair.beforePhoto === 'string') ? pair.beforePhoto : null;
+                const afterPhoto = (pair.afterPhoto && typeof pair.afterPhoto === 'string') ? pair.afterPhoto : null;
+                const pairId = (pair.id && typeof pair.id === 'string') ? pair.id : `photo-${index}`;
+                
+                // Skip if no photos
+                if (!beforePhoto && !afterPhoto) {
+                  return null;
+                }
                 
                 return (
-                  <View key={pair.id} style={{ marginBottom: 12, padding: 8, backgroundColor: "#F9FAFB", borderRadius: 4, border: "1 solid #E5E7EB" }}>
+                  <View key={pairId} style={{ marginBottom: 12, padding: 8, backgroundColor: "#F9FAFB", borderRadius: 4, border: "1 solid #E5E7EB" }}>
                     <Text style={{ fontSize: 8, color: "#6B7280", fontWeight: "bold", marginBottom: 6 }}>
                       Photo Set {index + 1}
                     </Text>
                     <View style={{ flexDirection: "row", gap: 8, justifyContent: "flex-start" }}>
-                      {pair.beforePhoto && (
+                      {beforePhoto && (
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 7, color: "#6B7280", marginBottom: 4 }}>Before</Text>
-                          <Image src={pair.beforePhoto} style={{ width: 120, height: 90, objectFit: "contain", borderRadius: 4, border: "1 solid #E5E7EB" }} />
+                          <Image src={beforePhoto} style={{ width: 120, height: 90, objectFit: "contain", borderRadius: 4, border: "1 solid #E5E7EB" }} />
                         </View>
                       )}
-                      {pair.afterPhoto && (
+                      {afterPhoto && (
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontSize: 7, color: "#6B7280", marginBottom: 4 }}>After</Text>
-                          <Image src={pair.afterPhoto} style={{ width: 120, height: 90, objectFit: "contain", borderRadius: 4, border: "1 solid #E5E7EB" }} />
+                          <Image src={afterPhoto} style={{ width: 120, height: 90, objectFit: "contain", borderRadius: 4, border: "1 solid #E5E7EB" }} />
                         </View>
                       )}
                     </View>
@@ -636,20 +696,20 @@ export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
             <View style={styles.gridCol}>
               <View style={styles.row}>
                 <Text style={styles.label}>Work Completed By:</Text>
-                <Text style={styles.value}>{data.workCompletedBy}</Text>
+                <Text style={styles.value}>{safeData.workCompletedBy}</Text>
               </View>
             </View>
             <View style={styles.gridCol}>
               <View style={styles.row}>
                 <Text style={styles.label}>Completion Date:</Text>
-                <Text style={styles.value}>{formatDate(data.completionDate)}</Text>
+                <Text style={styles.value}>{formatDate(safeData.completionDate)}</Text>
               </View>
             </View>
-            {data.paymentMethod && (
+            {safeData.paymentMethod && (
               <View style={styles.gridCol}>
                 <View style={styles.row}>
                   <Text style={styles.label}>Payment Method:</Text>
-                  <Text style={styles.value}>{data.paymentMethod}</Text>
+                  <Text style={styles.value}>{safeData.paymentMethod}</Text>
                 </View>
               </View>
             )}
@@ -660,21 +720,21 @@ export default function WorkOrderPDF({ data }: WorkOrderPDFProps) {
             {/* Technician Signature */}
             <View style={styles.signatureBox}>
               <Text style={styles.signatureLabel}>Technician Signature</Text>
-              {data.technicianSignature && (
-                <Image src={data.technicianSignature} style={styles.signatureImage} />
+              {safeData.technicianSignature && (
+                <Image src={safeData.technicianSignature} style={styles.signatureImage} />
               )}
-              <Text style={styles.signatureName}>{data.workCompletedBy}</Text>
-              <Text style={styles.signatureDate}>{formatDate(data.completionDate)}</Text>
+              <Text style={styles.signatureName}>{safeData.workCompletedBy}</Text>
+              <Text style={styles.signatureDate}>{formatDate(safeData.completionDate)}</Text>
             </View>
 
             {/* Customer Signature */}
             <View style={styles.signatureBox}>
               <Text style={styles.signatureLabel}>Customer Signature</Text>
-              {data.customerSignature && (
-                <Image src={data.customerSignature} style={styles.signatureImage} />
+              {safeData.customerSignature && (
+                <Image src={safeData.customerSignature} style={styles.signatureImage} />
               )}
-              <Text style={styles.signatureName}>{data.customerApprovalName}</Text>
-              <Text style={styles.signatureDate}>{formatDate(data.customerApprovalDate)}</Text>
+              <Text style={styles.signatureName}>{safeData.customerApprovalName}</Text>
+              <Text style={styles.signatureDate}>{formatDate(safeData.customerApprovalDate)}</Text>
             </View>
           </View>
         </View>
