@@ -25,6 +25,10 @@
       "maxDuration": 60,
       "memory": 1024
     },
+    "app/api/work-orders/[id]/pdf/route.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
     "app/api/auth/refresh/route.ts": {
       "maxDuration": 30,
       "memory": 512

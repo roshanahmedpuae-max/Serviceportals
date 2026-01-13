@@ -172,6 +172,9 @@ export default function AdminDashboard() {
   const [editStatus, setEditStatus] = useState<EmployeeStatus>("Available");
   const [editPassword, setEditPassword] = useState("");
   const [editFeatureAccess, setEditFeatureAccess] = useState<string[]>([]);
+  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState("");
+  const [editCustomerContact, setEditCustomerContact] = useState("");
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [showCreateEmployeePassword, setShowCreateEmployeePassword] = useState(false);
   const [showEditEmployeePassword, setShowEditEmployeePassword] = useState(false);
@@ -1419,6 +1422,51 @@ export default function AdminDashboard() {
     }
   };
 
+  const startEditCustomer = (customer: Customer) => {
+    setEditingCustomerId(customer.id);
+    setEditCustomerName(customer.name);
+    setEditCustomerContact(customer.contact || "");
+  };
+
+  const handleUpdateCustomer = async () => {
+    if (!editingCustomerId) return;
+    try {
+      const updated = await authedFetch("/api/customers", {
+        method: "PUT",
+        body: JSON.stringify({
+          id: editingCustomerId,
+          name: editCustomerName,
+          contact: editCustomerContact || undefined,
+        }),
+      });
+      setCustomers((prev) => prev.map((c) => (c.id === updated.id ? { id: updated.id, name: updated.name, contact: updated.contact } : c)));
+      toast.success("Customer updated");
+      setEditingCustomerId(null);
+      setEditCustomerName("");
+      setEditCustomerContact("");
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    const confirm = window.confirm("Delete this customer? This will remove all associated work orders.");
+    if (!confirm) return;
+    try {
+      await authedFetch("/api/customers", {
+        method: "DELETE",
+        body: JSON.stringify({ id }),
+      });
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+      toast.success("Customer deleted");
+      if (editingCustomerId === id) {
+        setEditingCustomerId(null);
+      }
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
+
   const startEditWorkOrder = (wo: WorkOrder) => {
     setEditingWorkOrderId(wo.id);
     setEditWorkOrderCustomerId(wo.customerId);
@@ -1896,19 +1944,83 @@ export default function AdminDashboard() {
                               {customers.length === 0 ? (
                                 <p className="text-sm text-slate-500">No customers yet.</p>
                               ) : (
-                                customers.map((c) => (
-                                  <div
-                                    key={c.id}
-                                    className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 bg-white"
-                                  >
-                                    <p className="text-sm font-medium text-slate-900">{c.name}</p>
-                                    {c.contact && (
-                                      <p className="text-xs text-slate-500 truncate max-w-[40%]">{c.contact}</p>
-                                    )}
-                                  </div>
-                                ))
+                                customers.map((c) => {
+                                  const isEditing = editingCustomerId === c.id;
+                                  return (
+                                    <div
+                                      key={c.id}
+                                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 bg-white"
+                                    >
+                                      {isEditing ? (
+                                        <div className="flex-1 grid grid-cols-2 gap-2">
+                                          <input
+                                            value={editCustomerName}
+                                            onChange={(ev) => setEditCustomerName(ev.target.value)}
+                                            className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                                            placeholder="Customer name"
+                                          />
+                                          <input
+                                            value={editCustomerContact}
+                                            onChange={(ev) => setEditCustomerContact(ev.target.value)}
+                                            className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                                            placeholder="Contact"
+                                          />
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-slate-900">{c.name}</p>
+                                            {c.contact && (
+                                              <p className="text-xs text-slate-500 truncate">{c.contact}</p>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => startEditCustomer(c)}
+                                              className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 flex items-center gap-1"
+                                              title="Edit"
+                                            >
+                                              <MdModeEdit className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteCustomer(c.id)}
+                                              className="text-xs px-2 py-1 rounded bg-rose-100 text-rose-700 hover:bg-rose-200 flex items-center gap-1"
+                                              title="Delete"
+                                            >
+                                              <MdDelete className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })
                               )}
                             </div>
+                            {editingCustomerId && (
+                              <div className="mt-4 border-t border-slate-200 pt-3 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleUpdateCustomer}
+                                  className="flex-1 px-3 py-2 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                                >
+                                  Save Changes
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCustomerId(null);
+                                    setEditCustomerName("");
+                                    setEditCustomerContact("");
+                                  }}
+                                  className="px-3 py-2 text-sm font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            )}
                           </Card>
                         </div>
                       </div>
